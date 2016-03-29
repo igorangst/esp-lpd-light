@@ -1,0 +1,74 @@
+<html>
+  <head>
+    <title>Nachti Nachti!</title>
+    <link rel="stylesheet" type="text/css" href="light.css">
+  </head>
+  <body bgColor="#404040">
+
+    <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.10.2/jquery.js"></script>
+    <script src="light.js"></script>
+ 
+    <p>
+      <table align="center" style="margin: 0px auto;">
+      <!-- <table id="colorchart" cellpadding="20"> -->
+	<tr><td class="c" onClick="col('FF0000');" bgColor="#FF0000" onClick="col('FF0000');"></td>
+	  <td class="c" bgColor="#FF4000" onClick="col('FF4000');"></td>
+	  <td class="c" bgColor="#FF8000" onClick="col('FF8000');"></td>
+	  <td class="c" bgColor="#FFBF00" onClick="col('FFBF00');"></td>
+	  <td class="c" bgColor="#FFFF00" onClick="col('FFFF00');"></td></tr><tr>
+	  <td class="c" bgColor="#BFFF00" onClick="col('BFFF00');"></td>
+	  <td class="c" bgColor="#80FF00" onClick="col('80FF00');"></td>
+	  <td class="c" bgColor="#40FF00" onClick="col('40FF00');"></td>
+	  <td class="c" bgColor="#00FF00" onClick="col('00FF00');"></td>
+	  <td class="c" bgColor="#00FF40" onClick="col('00FF40');"></td></tr><tr>
+	  <td class="c" bgColor="#00FF80" onClick="col('00FF80');"></td>
+	  <td class="c" bgColor="#00FFBF" onClick="col('00FFBF');"></td>
+	  <td class="c" bgColor="#00FFFF" onClick="col('00FFFF');"></td>
+	  <td class="c" bgColor="#00BFFF" onClick="col('00BFFF');"></td>
+	  <td class="c" bgColor="#0080FF" onClick="col('0080FF');"></td></tr><tr>
+	  <td class="c" bgColor="#0040FF" onClick="col('0040FF');"></td>
+	  <td class="c" bgColor="#0000FF" onClick="col('0000FF');"></td>
+	  <td class="c" bgColor="#4000FF" onClick="col('4000FF');"></td>
+	  <td class="c" bgColor="#8000FF" onClick="col('8000FF');"></td>
+	  <td class="c" bgColor="#BF00FF" onClick="col('BF00FF');"></td></tr><tr>
+	  <td class="c" bgColor="#FF00BF" onClick="col('FF00BF');"></td>
+	  <td class="c" bgColor="#FF0080" onClick="col('FF0080');"></td>
+	  <td class="c" bgColor="#FF0040" onClick="col('FF0040');"></td>
+	  <td class="c" bgColor="#FAFAFA" onClick="col('FFFFFF');"></td>
+	  <td class="c" bgColor="#000000" onClick="col('000000');"></td></tr>
+      </table>
+    </p>
+    <p>
+      <button id="switch" onClick="onoff();" style="background-color: #000000;">ON/OFF</button>&nbsp;<button id="fade" disabled="true" onClick="setFX(0);">FADE</button>&nbsp;<button id="wheel" onClick="setFX(1);" style="background-color: #000000;">WHEEL</button>
+    </p>
+    <p>
+      <table align="center"><tr><td onClick="dec();"><span class="l">LESS&nbsp;</span></td>
+	  <td><table id="queue" align="center" style="margin: 0px auto;" bgColor="#404040">
+	      <tr>
+		<td class="q" id="q1" bgColor="#000000" onClick="num(1);">1</td>
+		<td class="q" id="q2" bgColor="#404040" onClick="num(2);">2</td>
+		<td class="q" id="q3" bgColor="#404040" onClick="num(3);">3</td>
+		<td class="q" id="q4" bgColor="#404040" onClick="num(4);">4</td>
+		<td class="q" id="q5" bgColor="#404040" onClick="num(5);">5</td>
+	      </tr>
+	    </table>  
+	  </td>
+	  <td onClick="inc();"><span class="r">&nbsp;MORE</span></td>
+	</tr>
+      </table>	
+    </p>
+    <p>
+      <span class="l">DARK</span><input class="slider" id="bright" type="range" min="1" max="128" onchange="setBrightness(this.value);"></input><span class="r">BRIGHT</span>
+    </p>
+    <p>
+      <span class="l">SLOW</span><input class="slider" id="speed" type="range" min="1" max="128" onchange="setSpeed(this.value);"></input><span class="r">FAST</span>
+    </p>
+    <p>
+      [<span id="status">???</span>]<br>
+      [<span id="message">???</span>]
+    </p>
+    <p>
+      <button id="connect" onClick="connect();">CONNECT</button>
+    </p>
+  </body>
+</html>

@@ -3,9 +3,9 @@
 # 'combined' - Combined firmware blob, no OTA upgrade
 # 'ota' - Combined firmware blob with OTA upgrades.
 #Please do a 'make clean' after changing this.
-#OUTPUT_TYPE=separate
+OUTPUT_TYPE=separate
 #OUTPUT_TYPE=combined
-OUTPUT_TYPE=ota
+#OUTPUT_TYPE=ota
 
 #SPI flash size, in K
 ESP_SPI_FLASH_SIZE_K=1024
@@ -35,14 +35,14 @@ SDK_BASE	?= /opt/Espressif/ESP8266_SDK
 
 # Opensdk patches stdint.h when compiled with an internal SDK. If you run into compile problems pertaining to
 # redefinition of int types, try setting this to 'yes'.
-USE_OPENSDK?=no
+USE_OPENSDK?=yes
 
 #Esptool.py path and port
 ESPTOOL		?= esptool.py
 ESPPORT		?= /dev/ttyUSB0
 #ESPDELAY indicates seconds to wait between flashing the two binary images
 ESPDELAY	?= 3
-ESPBAUD		?= 460800
+ESPBAUD		?= 115200
 
 #Appgen path and name
 APPGEN		?= $(SDK_BASE)/tools/gen_appbin.py

@@ -7,106 +7,140 @@
  * ----------------------------------------------------------------------------
  */
 
-/*
-This is example code for the esphttpd library. It's a small-ish demo showing off 
-the server, including WiFi connection management capabilities, some IO and
-some pictures of cats.
-*/
-
 #include <esp8266.h>
 #include "httpd.h"
 #include "io.h"
 #include "httpdespfs.h"
-#include "cgi.h"
 #include "cgiwifi.h"
-#include "cgiflash.h"
 #include "stdout.h"
 #include "auth.h"
 #include "espfs.h"
 #include "captdns.h"
 #include "webpages-espfs.h"
 #include "cgiwebsocket.h"
-#include "cgi-test.h"
+#include "lpd8806.h"
+#include "color.h"
 
-//The example can print out the heap use every 3 seconds. You can use this to catch memory leaks.
-//#define SHOW_HEAP_USE
+static ETSTimer lightTimer;
 
-//Function that tells the authentication system what users/passwords live on the system.
-//This is disabled in the default build; if you want to try it, enable the authBasic line in
-//the builtInUrls below.
-int myPassFn(HttpdConnData *connData, int no, char *user, int userLen, char *pass, int passLen) {
-	if (no==0) {
-		os_strcpy(user, "admin");
-		os_strcpy(pass, "s3cr3t");
-		return 1;
-//Add more users this way. Check against incrementing no for each user added.
-//	} else if (no==1) {
-//		os_strcpy(user, "user1");
-//		os_strcpy(pass, "something");
-//		return 1;
+#define NLEDS 24
+
+uint16 numColors = 1;   // number of colors in the queue, between 1 and 5
+Color  colors[5];       // color queue used for fading or wheel effect
+uint32 time = 0;        // global time
+uint16 deltaT = 64;     // step size by which time advances at each update
+uint16 brightness = 64; // brightness value in [0,128]
+uint16 fx = 0;          // effect 0: fade, 1: wheel
+uint8  status = 0;      // main switch 0:off, 1:on
+
+void lightTimerfunc(void *arg)
+{
+  // advance time
+  time += deltaT;
+  
+  // we ignore the LSBs for later calculations 
+  uint16 t = time >> 4;
+
+  if (status==0){ // set all LEDs to black
+    uint16 i;
+    for (i=0; i<NLEDS; ++i){
+      lpd8806_set_pixel_rgb(i,0,0,0);
+    }
+    lpd8806_show();
+  } else {
+    if (numColors==1){ // single color with brightness
+      uint16 i;
+      Color c = dim(colors[0], brightness);
+      for (i=0; i<NLEDS; ++i){
+	lpd8806_set_pixel_color(i, c);
+      }
+      lpd8806_show();
+    } else {
+      if (fx == 1){ // color wheel
+	uint16 i;
+	Color c;
+	for (i=0; i<NLEDS; ++i){
+	  c = color_interpolate_list(colors, numColors, t + i*(numColors*128/NLEDS));
+	  c = dim(c, brightness);
+	  lpd8806_set_pixel_color(i, c);
 	}
-	return 0;
+	lpd8806_show();
+      } else if (fx == 0){ // fade
+	uint16 i;
+	Color c = color_interpolate_list(colors, numColors, t);
+	c = dim(c, brightness);
+	for (i=0; i<NLEDS; ++i){
+	  lpd8806_set_pixel_color(i, c);
+	}
+	lpd8806_show();
+      }
+    }
+  }
 }
 
-static ETSTimer websockTimer;
-
-//Broadcast the uptime in seconds every second over connected websockets
-static void ICACHE_FLASH_ATTR websockTimerCb(void *arg) {
-	static int ctr=0;
-	char buff[128];
-	ctr++;
-	os_sprintf(buff, "Up for %d minutes %d seconds!\n", ctr/60, ctr%60);
-	cgiWebsockBroadcast("/websocket/ws.cgi", buff, os_strlen(buff), WEBSOCK_FLAG_NONE);
+bool startsWith(const char *str, const char *pre)
+{
+    size_t lenpre = strlen(pre),
+           lenstr = strlen(str);
+    return lenstr < lenpre ? false : strncmp(pre, str, lenpre) == 0;
 }
 
-//On reception of a message, send "You sent: " plus whatever the other side sent
 void myWebsocketRecv(Websock *ws, char *data, int len, int flags) {
-	int i;
-	char buff[128];
-	os_sprintf(buff, "You sent: ");
-	for (i=0; i<len; i++) buff[i+10]=data[i];
-	buff[i+10]=0;
-	cgiWebsocketSend(ws, buff, os_strlen(buff), WEBSOCK_FLAG_NONE);
+  char *val = strstr(data, "=");
+  char buff[128];
+  if (startsWith(data, "SWITCH")){
+    if (val != NULL){
+      status = atoi(val+1);
+    }
+    os_sprintf(buff, "SWITCH OK"); 
+  } else if (startsWith(data, "NCOLORS")){
+    if (val != NULL){
+      numColors = atoi(val+1);
+      if (numColors < 1){
+	numColors = 1;
+      }
+      if (numColors > 5){
+	numColors = 5;
+      }
+    }
+    os_sprintf(buff, "SET NCOLORS OK"); 
+  } else if (startsWith(data, "BRIGHT")){
+    if (val != NULL){
+      brightness = atoi(val+1);
+    }
+    os_sprintf(buff, "SET BRIGHTNESS OK"); 
+  } else if (startsWith(data, "SPEED")){
+    if (val != NULL){
+      deltaT = atoi(val+1);
+    }
+    os_sprintf(buff, "SET SPEED OK"); 
+  } else if (startsWith(data, "FX")){
+    if (val != NULL){
+      fx = atoi(val+1);
+    }
+    os_sprintf(buff, "SET FX OK"); 
+  } else if (startsWith(data, "COLORS")){
+    uint16 i;
+    for (i=0; i<5; ++i){
+      uint32 hex = (uint32)strtol(val+1+7*i, NULL, 16);
+      Color c;
+      c.r = ((hex >> 16) & 0xff) >> 1;
+      c.g = ((hex >> 8 ) & 0xff) >> 1;
+      c.b = ((hex >> 0 ) & 0xff) >> 1;
+      colors[i] = c;
+    }
+    os_sprintf(buff, "SET COLORS OK"); 
+  } else {
+    os_sprintf(buff, "ILLEGAL COMMAND"); 
+  }
+  cgiWebsocketSend(ws, buff, os_strlen(buff), WEBSOCK_FLAG_NONE);
 }
 
 //Websocket connected. Install reception handler and send welcome message.
 void myWebsocketConnect(Websock *ws) {
 	ws->recvCb=myWebsocketRecv;
-	cgiWebsocketSend(ws, "Hi, Websocket!", 14, WEBSOCK_FLAG_NONE);
+	cgiWebsocketSend(ws, "HELLO WORLD!", 14, WEBSOCK_FLAG_NONE);
 }
-
-//On reception of a message, echo it back verbatim
-void myEchoWebsocketRecv(Websock *ws, char *data, int len, int flags) {
-	os_printf("EchoWs: echo, len=%d\n", len);
-	cgiWebsocketSend(ws, data, len, flags);
-}
-
-//Echo websocket connected. Install reception handler.
-void myEchoWebsocketConnect(Websock *ws) {
-	os_printf("EchoWs: connect\n");
-	ws->recvCb=myEchoWebsocketRecv;
-}
-
-
-#ifdef ESPFS_POS
-CgiUploadFlashDef uploadParams={
-	.type=CGIFLASH_TYPE_ESPFS,
-	.fw1Pos=ESPFS_POS,
-	.fw2Pos=0,
-	.fwSize=ESPFS_SIZE,
-};
-#define INCLUDE_FLASH_FNS
-#endif
-#ifdef OTA_FLASH_SIZE_K
-CgiUploadFlashDef uploadParams={
-	.type=CGIFLASH_TYPE_FW,
-	.fw1Pos=0x1000,
-	.fw2Pos=((OTA_FLASH_SIZE_K*1024)/2)+0x1000,
-	.fwSize=((OTA_FLASH_SIZE_K*1024)/2)-0x1000,
-	.tagName=OTA_TAGNAME
-};
-#define INCLUDE_FLASH_FNS
-#endif
 
 /*
 This is the main url->function dispatching data struct.
@@ -120,18 +154,7 @@ should be placed above the URLs they protect.
 */
 HttpdBuiltInUrl builtInUrls[]={
 	{"*", cgiRedirectApClientToHostname, "esp8266.nonet"},
-	{"/", cgiRedirect, "/index.tpl"},
-	{"/flash.bin", cgiReadFlash, NULL},
-	{"/led.tpl", cgiEspFsTemplate, tplLed},
-	{"/index.tpl", cgiEspFsTemplate, tplCounter},
-	{"/led.cgi", cgiLed, NULL},
-	{"/flash/download", cgiReadFlash, NULL},
-#ifdef INCLUDE_FLASH_FNS
-	{"/flash/next", cgiGetFirmwareNext, &uploadParams},
-	{"/flash/upload", cgiUploadFirmware, &uploadParams},
-#endif
-	{"/flash/reboot", cgiRebootFirmware, NULL},
-
+	{"/", cgiRedirect, "/light.html"},
 	//Routines to make the /wifi URL and everything beneath it work.
 
 //Enable the line below to protect the WiFi configuration with an username/password combo.
@@ -142,34 +165,34 @@ HttpdBuiltInUrl builtInUrls[]={
 	{"/wifi/wifiscan.cgi", cgiWiFiScan, NULL},
 	{"/wifi/wifi.tpl", cgiEspFsTemplate, tplWlan},
 	{"/wifi/connect.cgi", cgiWiFiConnect, NULL},
-	{"/wifi/connstatus.cgi", cgiWiFiConnStatus, NULL},
 	{"/wifi/setmode.cgi", cgiWiFiSetMode, NULL},
 
 	{"/websocket/ws.cgi", cgiWebsocket, myWebsocketConnect},
-	{"/websocket/echo.cgi", cgiWebsocket, myEchoWebsocketConnect},
 
 	{"/test", cgiRedirect, "/test/index.html"},
 	{"/test/", cgiRedirect, "/test/index.html"},
-	{"/test/test.cgi", cgiTestbed, NULL},
 
 	{"*", cgiEspFsHook, NULL}, //Catch-all cgi function for the filesystem
 	{NULL, NULL, NULL}
 };
-
-
-#ifdef SHOW_HEAP_USE
-static ETSTimer prHeapTimer;
-
-static void ICACHE_FLASH_ATTR prHeapTimerCb(void *arg) {
-	os_printf("Heap: %ld\n", (unsigned long)system_get_free_heap_size());
-}
-#endif
 
 //Main routine. Initialize stdout, the I/O, filesystem and the webserver and we're done.
 void user_init(void) {
 	stdoutInit();
 	ioInit();
 	captdnsInit();
+
+	colors[0] = COLOR_RED;
+	colors[1] = COLOR_BLUE;
+	colors[2] = COLOR_GREEN;
+	colors[3] = COLOR_PURPLE;
+	colors[4] = COLOR_CYAN;
+
+	gpio_init();
+	lpd8806_init(32, 2, 0);
+	os_timer_disarm(&lightTimer);
+	os_timer_setfn(&lightTimer, (os_timer_func_t *)lightTimerfunc, NULL);
+	os_timer_arm(&lightTimer, 50, 1);
 
 	// 0x40200000 is the base address for spi flash memory mapping, ESPFS_POS is the position
 	// where image is written in flash that is defined in Makefile.
@@ -179,14 +202,6 @@ void user_init(void) {
 	espFsInit((void*)(webpages_espfs_start));
 #endif
 	httpdInit(builtInUrls, 80);
-#ifdef SHOW_HEAP_USE
-	os_timer_disarm(&prHeapTimer);
-	os_timer_setfn(&prHeapTimer, prHeapTimerCb, NULL);
-	os_timer_arm(&prHeapTimer, 3000, 1);
-#endif
-	os_timer_disarm(&websockTimer);
-	os_timer_setfn(&websockTimer, websockTimerCb, NULL);
-	os_timer_arm(&websockTimer, 1000, 1);
 	os_printf("\nReady\n");
 }
 
